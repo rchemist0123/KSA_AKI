@@ -323,17 +323,17 @@ df[,AKI_Day3_cr := ifelse(Cr_ICUD3 >= Cr_baseline_MDRD * 3.0 | Cr_ICUD3 > 4, 1,0
 df[,AKI_Day7_cr := ifelse(Cr_ICUD7 >= Cr_baseline_MDRD * 3.0 | Cr_ICUD7 > 4, 1,0)]
 
 df[,AKI_stage3_Cr := do.call(pmax, c(.SD, na.rm=T)),.SDcols=patterns("AKI_Day\\d_cr")]
-df[,AKI_stage3_urine := do.call(pmax, c(.SD, na.rm=T)),.SDcols=patterns("_urine$")]
+df[,AKI_stage3_urine := do.call(pmax, c(.SD, na.rm=T)),.SDcols=patterns("AKI_Day\\d_urine")]
 df[,AKI_stage3_Cr_urine := fifelse(AKI_stage=='Stage 3'  & AKI_stage3_urine==1,1,0)]
 
 df[,AKI_stage3_crrt := do.call(pmax, c(.SD, na.rm=T)), .SDcols=patterns("^ICUStayCCRT_ICUD\\d")]
 df[,AKI_stage3_yn := fifelse(AKI_stage == 'Stage 3',1,0)]
 
+df[,AKI_stage3_crrt_new := ifelse(AKI_stage3_crrt == 1,1,0)]
 df[,`:=`(
-  AKI_stage3_Cr_new = ifelse(AKI_stage3_Cr ==1 & AKI_stage3_urine ==0,1,0),
-  AKI_stage3_urine_new = ifelse(AKI_stage3_Cr == 0 & AKI_stage3_urine ==1,1,0),
-  AKI_stage3_Cr_urine_new = ifelse(AKI_stage3_Cr ==1 & AKI_stage3_urine ==1,1,0),
-  AKI_stage3_crrt_new = ifelse(AKI_stage3_Cr ==0 & AKI_stage3_urine ==0 & AKI_stage3_crrt == 1,1,0)
+  AKI_stage3_Cr_new = ifelse(AKI_stage3_crrt_new == 0 & AKI_stage3_Cr ==1 & AKI_stage3_urine ==0,1,0),
+  AKI_stage3_urine_new = ifelse(AKI_stage3_crrt_new == 0 & AKI_stage3_Cr == 0 & AKI_stage3_urine ==1,1,0),
+  AKI_stage3_Cr_urine_new = ifelse(AKI_stage3_crrt_new == 0 & AKI_stage3_Cr ==1 & AKI_stage3_urine ==1,1,0)
 )]
 
 df[,.N,AKI_stage3_Cr_new]
@@ -341,35 +341,20 @@ df[,.N,AKI_stage3_urine_new]
 df[,.N,AKI_stage3_Cr_urine_new]
 df[,.N,AKI_stage3_crrt_new]
 df[,.N,AKI_stage3_new]
-# df[,AKI_stage_Cr_CRRT_UOP := ifelse(AKI_stage3_urine==1,'Stage 3',AKI_stage)]
-# 
-# df[AKI_stage_Cr_CRRT_UOP=='Stage 3' & (
-#   ICUStayCCRT_ICUD1==1 | ICUStayCCRT_ICUD2 == 1|
-#     ICUStayCCRT_ICUD3==1 | ICUStayCCRT_ICUD7 ==1
-# ),.N]
-# 
-# 
+ 
 
 urine_cr_stage3_melt = df[,.N, .(AKI_stage3_Cr_new, AKI_stage3_urine_new, 
                                  AKI_stage3_Cr_urine_new, 
                                  AKI_stage3_crrt_new)]
-# urine_cr_stage3_melt_prop = urine_cr_stage3_melt[,.N,.(variable,value)][,prop := round(N/sum(N)*100,1), by=.(variable)]
-# urine_cr_stage3_melt_prop[,name := fcase(variable=="AKI_stage3_yn","AKI by SCr criteria",
-#                                          variable == 'AKI_stage3_urine', "AKI by UOP criteria",
-#                                          variable == 'AKI_stage3_Cr_urine', "AKI by SCr & UOP criteria",
-#                                          default = 'AKI by CRRT criteria') |> 
-#                             factor(levels=c('AKI by SCr criteria',
-#                                             'AKI by UOP criteria','AKI by CRRT criteria',
-                                            # 'AKI by SCr & UOP criteria'))]
 
 stage3_df = data.table(
   criteria = rep(c("Scr",'UOP','Scr & UOP','CRRT'), each=2),
-  n=c(4216, 650, 3649, 1217, 4196, 670, 4617, 249),
+  n=c(4541, 321, 3939, 927, 4614, 252, 3576, 1290),
   yn = rep(c(0,1),4),
   x=rep(1,8)
 )
 stage3_df[,prop := n/sum(n)*100, by=criteria][]
-stage3_df[,criteria2 := factor(criteria, levels=c('UOP','Scr & UOP','Scr', 'CRRT'))]
+stage3_df[,criteria2 := factor(criteria, levels=c('CRRT', 'UOP','Scr','Scr & UOP'))]
 stage3_df[yn==1]|> 
   ggplot(aes(x=reorder(x,-prop), y=prop, fill=criteria2)) +
   geom_col(position=position_dodge(),width=.5) +
@@ -415,7 +400,7 @@ df[AKI_stage3_crrt_new==1,.N,inhos_mortality]
 
 stage3_inhos_df = data.table(
   criteria = rep(c("Scr",'UOP','Scr & UOP','CRRT'), each=2),
-  n=c(439, 211, 684, 533, 292, 378, 98, 151),
+  n=c(255, 66, 612, 315, 136, 116, 510, 780),
   yn = rep(c(0,1),4),
   x=rep(1,8)
 )
@@ -438,12 +423,21 @@ stage3_inhos_df[yn==1] |>
         axis.text = element_text(size=15),
         axis.title = element_text(size=15),
         legend.text = element_text(size=12)) +
-  geom_label(aes(label="p<0.001", y=65), fill="white", size=8)
+  # geom_label(aes(label="p<0.001", y=65), fill="white", size=8) +
+  geom_signif(
+    y_position = c(63,49, 38),
+    xmin= c(0.795, 0.925, 1.055),
+    xmax = c(0.925, 1.055, 1.185),
+    annotations = rep('p < 0.001',3),
+    tip_length = .05
+  )
+stage3_inhos_df
 
-mat_death = matrix(c(439, 211, 684, 533, 292, 378, 98, 151),
-                   ncol=2, byrow=T); mat_death 
+df[AKI_stage3_urine_new==1,.N, AKI_stage]
+
+mat_death = matrix(stage3_inhos_df$n, ncol=2, byrow=T)
 mat_death |> chisq.test()
-rownames(mat_death) = c('CRRT','Scr & UOP', 'UOP','Scr')
+rownames(mat_death) = c('Scr', 'UOP', 'Scr & UOP', 'CRRT')
 colnames(mat_death) = c(0,1)
 pairwiseNominalMatrix(mat_death,compare = 'row',
                       method='bonferroni')
