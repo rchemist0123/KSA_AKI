@@ -52,7 +52,48 @@ dicho_vars = df[,.(SEX,Comorbidity_MOSIAC_DM, Comorbidity_MOSIAC_Cardio, Comorbi
 
 library(lme4)
 library(car)
-form = paste0("AKI_01_23~",paste0(tbl2_vars,collapse = "+"),'+(1|Center2)')
+library(coxme)
+library(finalfit)
+library(kableExtra)
+tbl2 = finalfit.glm(
+  .data=df,
+  dependent = "AKI_01_23",
+  explanatory = tbl2_vars,
+  explanatory_multi = setdiff(tbl2_vars, 'CFScore'),
+  keep_models = T,
+  random_effect = "Center2"
+)
+
+tbl2 |> 
+  kbl() |> 
+  kable_paper("hover", full_width = F)
+
+
+
+
+# For univariable
+temp = lapply(tbl2_vars,\(x){
+  form = paste0("AKI_01_23 ~ ",x,"+(1|Center2)")
+  fit = glmer(as.formula(form), family=binomial, data=df)
+  tab = tbl_regression(
+    x=fit,
+    exponentiate = T,
+    pvalue_fun = ~style_pvalue(., digits=3),
+    estimate_fun = ~style_ratio(., digits=2)
+  )|> modify_table_styling(
+      column = estimate,
+      rows = !is.na(estimate),
+      cols_merge_pattern = "{estimate} ({conf.low}-{conf.high})"
+    ) |> 
+    modify_header(estimate ~ "**OR (95% CI)**") |> 
+    modify_column_hide(c(ci))
+})
+
+tbl_stack(temp)
+
+# For multi
+form = paste0("AKI_01_23~",
+              paste0(setdiff(tbl2_vars,c("CFScore","Comorbidity_MOSIAC_HMM","Comorbidity_MOSIAC_IMM")),collapse = "+"),'+(1|Center2)')
 lr_fit = glmer(as.formula(form),family=binomial, data=df)
 summary(lr_fit)
 vif(lr_fit)
@@ -77,7 +118,7 @@ tbl_regression(
 # Table 3----------------------------------------------------------
 
 cox_risk_factors = df[,.( Age,SEX, BMI, CFScore,
-                          AKI_stage, 
+                          # AKI_stage, 
                           Comorbidity_MOSIAC_DM, Comorbidity_MOSIAC_Cardio, Comorbidity_MOSIAC_Lung,Comorbidity_MOSIAC_CKD,
                           Comorbidity_MOSIAC_SMT, Comorbidity_MOSIAC_HMM, Comorbidity_MOSIAC_IMM, 
                           SOFA_ICUD1, SAPS3_ICUD1, 
@@ -89,7 +130,29 @@ cox_risk_factors = df[,.( Age,SEX, BMI, CFScore,
                           AntbBEFCurrent2,
                           AppInitEmpThe_re, 
                           lac1h, bd1h, anti1h, br1h, app1h)] |> names()
-form = paste0("Surv(inhos_duration, inhos_mortality==1)~", paste0(cox_risk_factors, collapse = "+"),"+cluster(Center2)")
+# For univariable
+temp = lapply(cox_risk_factors,\(x){
+  form = paste0("inhos_mortality ~ ",x,"+(1|Center2)")
+  fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==0])
+  tab = tbl_regression(
+    x=fit,
+    exponentiate = T,
+    pvalue_fun = ~style_pvalue(., digits=3),
+    estimate_fun = ~style_ratio(., digits=2)
+  )|> modify_table_styling(
+    column = estimate,
+    rows = !is.na(estimate),
+    cols_merge_pattern = "{estimate} ({conf.low}-{conf.high})"
+  ) |> 
+    modify_header(estimate ~ "**OR (95% CI)**") |> 
+    modify_column_hide(c(ci))
+})
+
+tbl_stack(temp)
+
+# For multivariable
+form = paste0("Surv(inhos_duration, inhos_mortality==1)~", 
+              paste0(setdiff(cox_risk_factors,'Comorbidity_MOSIAC_IMM'), collapse = "+"),"+cluster(Center2)")
 fit = coxph(as.formula(form), data=df[AKI_YN==1])
 shapiro.test(df[AKI_01_23==0]$shock_index_SBP)
 shapiro.test(df[AKI_01_23==1]$shock_index_SBP)
@@ -106,7 +169,8 @@ tbl_summary(
 
 
 #AKI
-a=makeSupTbl4(fit)
+a=makeTable3(fit)
+a
 
 # check for vif
 form = paste0('inhos_mortality ~ ',paste0(setdiff(cox_risk_factors,'AKI_stage'), collapse = "+"),"+(1|Center2)")
