@@ -40,14 +40,14 @@ makeBaselineTable = function(data, include, dicho_vars, by){
   return(tbl1)
 }
 
-makeSupTbl4 = function(fit){
+makeTable3 = function(fit){
   tbl_regression(
     x = fit,
     exponentiate = T,
     show_single_row = c(s_pulmonary, s_abdominal, s_urinary,
                         AntbBEFCurrent2, SEX,
                         Comorbidity_MOSIAC_DM, Comorbidity_MOSIAC_Cardio, Comorbidity_MOSIAC_Lung,Comorbidity_MOSIAC_CKD,
-                        Comorbidity_MOSIAC_SMT, Comorbidity_MOSIAC_HMM, Comorbidity_MOSIAC_IMM, 
+                        Comorbidity_MOSIAC_SMT, Comorbidity_MOSIAC_HMM, 
                         AppInitEmpThe_re),
     pvalue_fun = ~style_pvalue(., digits=3),
     estimate_fun = ~style_ratio(., digits=2)
