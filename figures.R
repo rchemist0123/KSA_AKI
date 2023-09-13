@@ -432,8 +432,24 @@ stage3_inhos_df[yn==1] |>
     tip_length = .05
   )
 stage3_inhos_df
+fcount(df$AKI_stage)
+df |> 
+  sbt(AKI_stage3_urine_new==1 & AKI_stage=='Non-AKI') |> 
+  get_vars('urine_output_ICUD\\d', regex=T)
+  
+get_vars(df, 'urine_output_ICUD\\d', regex=T) |> 
+  descr()
 
-df[AKI_stage3_urine_new==1,.N, AKI_stage]
+df[AKI_status_day1!='Dead',urine_output_ICUD1] |> descr()
+df[AKI_status_day2!='Dead',urine_output_ICUD2] |> descr()
+df[AKI_status_day3!='Dead',urine_output_ICUD3] |> descr()
+df[AKI_status_day7!='Dead',urine_output_ICUD7] |> descr()
+df[AKI_Day1_urine==1 & AKI_status_day1=='Dead'] |> dim()
+df[AKI_Day2_urine==1 & AKI_status_day2=='Dead'] |> dim()
+df[AKI_Day3_urine==1 & AKI_status_day3=='Dead'] |> dim()
+df[AKI_Day7_urine==1 & AKI_status_day7=='Dead'] |> dim()
+
+df[,summary(.SD), .SDcols=patterns('urine_output_ICUD\\d')]
 
 mat_death = matrix(stage3_inhos_df$n, ncol=2, byrow=T)
 mat_death |> chisq.test()
@@ -449,15 +465,17 @@ library(plotRCS)
 # X: input
 # covars: ~ + output Day ~
 # Outcomes: AKI_01_23, inhos_mortality, icu_mortality
-getRCSplot = function(x, covars, outcome, time=NULL, xlab){
+getRCSplot = function(x, target=NA,covars, outcome, time=NULL, xlab){
   vars = c(x, covars, outcome, time)
-  rcsplot(data = df[,..vars] |> na.omit(),
+  if(is.na(target)) data = df[,..vars] |> na.omit()
+  else data = df[AKI_01_23 == target, ..vars] |> na.omit()
+  rcsplot(data = data ,
           outcome = outcome,
           time = time,
           exposure = x,
           covariates = covars,
           na.rm=T) +
-    labs(x=xlab)
+    labs(x=xlab, y="adjusted OR (95% CI)")
 }
 
 getRCSplot(covars = c(tbl2_vars,'OutputPreICU_ICUD1'),
@@ -482,6 +500,8 @@ getRCSplot(covars = c(tbl2_vars,'output_ICUD01'),
            outcome = 'AKI_01_23',
            xlab='Input before ICU Admission ~ ICU Day1')
 
+
+## ALL
 getRCSplot(covars = c(cox_risk_factors,'output_ICUD01'),
            x='input_ICU01',
            outcome = 'inhos_mortality',
@@ -491,6 +511,37 @@ getRCSplot(covars = c(cox_risk_factors,'output_ICUD01'),
            x='input_ICU01',
            outcome = 'icu_mortality',
            xlab = 'Input before ICU Admission ~ ICU Day1')
+
+## Severe AKI
+getRCSplot(target= 1,
+           covars = c(cox_risk_factors,'output_ICUD01'),
+           x='input_ICU01',
+           outcome = 'inhos_mortality',
+           xlab = 'Input before ICU Admission ~ ICU Day1')
+
+getRCSplot(target=1,
+           covars = c(cox_risk_factors,'output_ICUD01'),
+           x='input_ICU01',
+           outcome = 'icu_mortality',
+           xlab = 'Input before ICU Admission ~ ICU Day1')
+
+
+## Non-severe AKI
+getRCSplot(target= 0,
+           covars = c(cox_risk_factors,'output_ICUD01'),
+           x='input_ICU01',
+           outcome = 'inhos_mortality',
+           xlab = 'Input before ICU Admission ~ ICU Day1')
+
+# ICU mortality
+
+
+getRCSplot(target=0,
+           covars = c(cox_risk_factors,'output_ICUD01'),
+           x='input_ICU01',
+           outcome = 'icu_mortality',
+           xlab = 'Input before ICU Admission ~ ICU Day1')
+
 
 df[,input_ICU012 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2')]
 df[,output_ICUD012 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2')]
@@ -516,15 +567,19 @@ getRCSplot(covars = c(tbl2_vars,'output_ICUD0123'),
            outcome = 'AKI_01_23',
            xlab='Input before ICU Admission ~ ICU Day3')
 
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD0123'),
+getRCSplot(target=1,
+           covars = c(cox_risk_factors,'output_ICUD0123'),
            x='input_ICU0123',
            outcome = 'inhos_mortality',
            xlab = 'Input before ICU Admission ~ ICU Day3')
 
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD0123'),
+getRCSplot(target=1,
+           covars = c(cox_risk_factors,'output_ICUD0123'),
            x='input_ICU0123',
            outcome = 'icu_mortality',
            xlab = 'Input before ICU Admission ~ ICU Day3')
+
+
 
 # AKI group In-hospital mortality (Kaplan-Meier, KM) ---------
 require(survival)
