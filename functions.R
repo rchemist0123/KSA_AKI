@@ -61,23 +61,23 @@ makeTable3 = function(fit){
     modify_column_hide(c(ci))
 }
 
-makeSupTbl5 = function(EGFR, var){
+makeSupTbl5 = function(EGFR, target, variables){
   temp = set_cohort(baseline='Cr_baseline_MDRD', eGFR = EGFR)
-  form = paste0("inhos_mortality~", paste0(cox_risk_factors, collapse = "+"),'+(1|Center2)')
+  form = paste0("inhos_mortality~", paste0(variables, collapse = "+"),'+(1|Center2)')
   overall = glmer(as.formula(form), family=binomial, data=temp) 
-  aki = glmer(as.formula(form), family=binomial, data=temp[AKI_YN==1]) 
-  noaki = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(cox_risk_factors,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_YN==0])
-  severAKI = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(cox_risk_factors,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_01_23==1])
-  no_one_aki = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(cox_risk_factors,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_01_23==0])
+  # aki = glmer(as.formula(form), family=binomial, data=temp[AKI_YN==1]) 
+  # noaki = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(variables,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_YN==0])
+  severAKI = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(variables,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_01_23==1])
+  no_one_aki = glmer(as.formula(paste0('inhos_mortality ~ ',paste0(setdiff(variables,'AKI_stage'), collapse = "+"),"+(1|Center2)")), family=binomial, data=temp[AKI_01_23==0])
   
-  tbl1 = tbl_regression(overall, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
-  tbl2 = tbl_regression(aki, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
-  tbl3 = tbl_regression(noaki, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
-  tbl4 = tbl_regression(severAKI, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
-  tbl5 = tbl_regression(no_one_aki, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
+  tbl1 = tbl_regression(overall, exponentiate = T)$table_body |> dplyr::filter(variable==target) |> dplyr::select(estimate, conf.low, conf.high)
+  # tbl2 = tbl_regression(aki, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
+  # tbl3 = tbl_regression(noaki, exponentiate = T)$table_body |> dplyr::filter(variable==var) |> dplyr::select(estimate, conf.low, conf.high)
+  tbl4 = tbl_regression(severAKI, exponentiate = T)$table_body |> dplyr::filter(variable==target) |> dplyr::select(estimate, conf.low, conf.high)
+  tbl5 = tbl_regression(no_one_aki, exponentiate = T)$table_body |> dplyr::filter(variable==target) |> dplyr::select(estimate, conf.low, conf.high)
   result = rbind(overall = tbl1,
-                 AKI = tbl2,
-                 NoAKI = tbl3,
+                 # AKI = tbl2,
+                 # NoAKI = tbl3,
                  severeAKI = tbl4,
                  nooneAKI = tbl5)
   result |> 

@@ -77,7 +77,6 @@ df[,.(ICUIntvRRT)]
 ## line + ribbon plot
 ribbon_line_plot = function(data, ckd){
   require(gridExtra)
-  ckd = 0
   df_aki_melt = melt(df[Chronic_kidney_ds==ckd],
                       id.vars = c("SubjectNo", "AKI_stage","Chronic_kidney_ds"),
                       measure.vars = patterns("Cr_new_ICUD\\d|Cr_baseline"),
@@ -91,56 +90,35 @@ ribbon_line_plot = function(data, ckd){
                                     n=.N),by=.(Day,AKI_stage)]
   df_aki_melt_aggr[, m_sd_n := paste0(format(round(mean,1),nsmall=1)," ± ",
                                       format(round(sd,1),nsmall=1),'\n(n=',scales::comma(n),')')]
+  max_y = ifelse(ckd==0,6,8)
+  print(max_y)
   p1 = df_aki_melt_aggr |> 
     ggplot(aes(x=Day, y=mean,
-               group = as.factor(AKI_stage)))+
+               group = as.factor(AKI_stage))) +
     geom_line(aes(color=as.factor(AKI_stage))) +
     geom_ribbon(aes(y=mean, ymin=mean-sd ,ymax = mean+sd, fill=as.factor(AKI_stage)),
                 alpha=.2) +
     geom_point(aes(color=as.factor(AKI_stage))) +
+    scale_x_discrete(labels=c("Time zero",'ICU D1', 'ICU D2','ICU D3','ICU D7')) +
     scale_y_continuous(expand=c(0,0),
-                       limits=c(0,6),
-                       breaks=seq(0,6,1))+
-    scale_color_discrete(name="AKI Stage") + 
-    scale_fill_discrete(name="AKI Stage") + 
+                       limits=c(0,max_y),
+                       breaks=seq(0,max_y,1)) +
+    scale_color_discrete(name="SA-AKI Stage",
+                         labels=c('No SA-AKI','Stage 1','Stage 2','Stage 3')) + 
+    scale_fill_discrete(name="SA-AKI Stage",
+                        labels=c('No SA-AKI','Stage 1','Stage 2','Stage 3')) + 
     theme_classic() + 
-    # facet_grid(~Chronic_kidney_ds,
-    #            labeller = labeller(Chronic_kidney_ds=ckd_label))+
-    labs(x="ICU Days",
-         y= "Average Cr (mg/dL)") +
+    labs(x="Time",
+         y= "Mean serum creatinine (mg/dL)") +
     theme(legend.position = "top",
           legend.text = element_text(size=12),
           legend.title = element_text(size=12),
           axis.title = element_text(size=15),
           axis.text = element_text(size=15))
-  # tbl = dcast(df_aki_melt_aggr, formula = AKI_stage ~ Day, value.var = 'm_sd_n')
-  # p2 = ggtexttable(tbl,
-  #             theme = ttheme(
-  #               rownames.style = rownames_style(
-  #                 face = 'plain'),
-  #               colnames.style=colnames_style(
-  #                 color = "black",
-  #                 face = "bold",
-  #                 size = 12,
-  #                 fill = "white",
-  #                 linewidth = 1,
-  #                 linecolor = "white"),
-  #               tbody.style = tbody_style(fill='white',  linecolor = "white")))
-  # p1 + p2 +
-  # #   plot_layout(ncol=1,heights = c(2.5,1))
-  # p2 = tableGrob(tbl, rows = NULL)
-  # p2$widths = unit(rep(1, ncol(p2)), "null")
-  # p2$heights = unit(rep(1, nrow(p2)), "null")
-  # p3 = ggplot() +
-  #   annotation_custom(p2)
-  # p1 + p3 + plot_layout(ncol=1, heights = c(2, 1))
   p1
 }
 ribbon_line_plot(data=df,ckd=0)
 ribbon_line_plot(data=df,ckd=1)
-dcast(df_aki_melt_aggr,
-      formula = AKI_stage ~ Day, value.var = 'n') |> 
-  ggtexttable()
 
 df[Chronic_kidney_ds==1 & AKI_stage =='Non-AKI'][!is.na(Cr_new_initial),.N]
 df[Chronic_kidney_ds==1 & AKI_stage =='Non-AKI'][!is.na(Cr_new_ICUD1),.N]
@@ -167,36 +145,45 @@ require(alluvial)
 df[,.(ICUADMDateTime_ICUD1, ICUDischDateTime, AKI_Day7)]
 df[is.na(AKI_Day7),.(ICUADMDateTime_ICUD1, ICUDischDateTime)]
 
-df[,AKI_initial_factor := factor(as.character(AKI_initial), levels=c("3","2","1","0"))]
+df[,AKI_initial_factor := factor(as.character(AKI_initial), levels=c("3","2","1","0"), labels = c("3","2","1","NoAKI"))]
 
 df[,.SD,.SDcols=patterns("_status")]
-
-df_alluvial = df[AKI_status_day1 != 0 &
-                   AKI_status_day2 != 0 &
-                   AKI_status_day3 != 0 &
-                   AKI_status_day7 != 0
-                   ,.N, by=.(AKI_stage, AKI_initial, AKI_status_day1, AKI_status_day2, 
+AKI_status_day1 != 0 &
+  AKI_status_day2 != 0 &
+  AKI_status_day3 != 0 &
+  AKI_status_day7 != 0
+df_alluvial = df[AKI_stage!="Non-AKI",.N, by=.(AKI_stage, AKI_initial, AKI_status_day1, AKI_status_day2, 
                            AKI_status_day3, AKI_status_day7)]
-df_alluvial |> View()
-alluvial(TZ=df_alluvial$AKI_initial, 
-         `Day 1` = df_alluvial$AKI_status_day1, 
-         `Day 2` = df_alluvial$AKI_status_day2, 
-         `Day 3` = df_alluvial$AKI_status_day3, 
-         `Day 7` = df_alluvial$AKI_status_day7,
+
+df_alluvial[,(target):=lapply(.SD, \(x) ifelse(x == 0, 'NoAKI', as.character(x))),.SDcols=target]
+df_alluvial[,(target):=lapply(.SD, factor, levels=rev(c("3","2","1","NoAKI","Alive","Dead"))),.SDcols = target]
+target = df_alluvial[,2:6] |> names()
+df_alluvial
+alluvial(`Time zero` = df_alluvial$AKI_initial, 
+         "ICU D1" = df_alluvial$AKI_status_day1, 
+         `ICU D2` = df_alluvial$AKI_status_day2, 
+         `ICU D3` = df_alluvial$AKI_status_day3, 
+         `ICU D7` = df_alluvial$AKI_status_day7,
          freq=df_alluvial$N,
          # border =ifelse(df_alluvial$AKI_stage == 'Stage 1','darkgreen',
          #                ifelse(df_alluvial$AKI_stage == 'Stage 2','blue','red'))
          col = ifelse(df_alluvial$AKI_stage == 'Stage 1','#00AFBB',
                              ifelse(df_alluvial$AKI_stage == 'Stage 2','#E7B800',"#FC4E07")),
-         alpha=.8
+         alpha=.8,
+         axis_labels = c("Time zero", 'ICU D1','ICU D2','ICU D3','ICU D7')
          )
+boxplot(mpg ~ cyl, data=mtcars)
+legend(x="top", 
+       legend=c("SA-AKI stage 3","SA-AKI stage 2","SA-AKI stage 1"), fill=c("#FC4E07",'#E7B800','#00AFBB'),
+       horiz = T)
 df_alluvial[,sum(N)]
 df_alluvial[AKI_stage=='Stage 1', sum(N)]
 df_alluvial[AKI_stage == 'Stage 1' & AKI_status_day7==1]
 # Figure S3A ----------------------------------------------------------------
 
 # Table3 cox_risk_factors 변수 사용
-form = paste0("inhos_mortality~",paste0(cox_risk_factors,collapse = "+"),"+(1|Center2)")
+form = paste0("inhos_mortality~",paste0(c("AKI_stage",cox_risk_factors),collapse = "+"),"+(1|Center2)")
+form = paste0("icu_mortality~",paste0(c("AKI_stage",cox_risk_factors),collapse = "+"),"+(1|Center2)")
 lr_fit = glmer(as.formula(form), family=binomial, data=df)
 single_rows = c("SEX","s_pulmonary","s_abdominal","s_urinary","s_other",
                 "s_unclear","fung_blood_sepsis","AppInitEmpThe_re","GramNegYN")
@@ -212,15 +199,23 @@ tbl_regression(
     rows = !is.na(estimate),
     cols_merge_pattern = "{estimate} ({conf.low}-{conf.high})"
   ) |> 
-  modify_header(estimate ~ "**OR (95% CI)**") |> 
+  modify_header(estimate ~ "**adjusted OR (95% CI)**") |> 
   modify_column_hide(c(ci))
 
 # Y: inhos_mortality
 forest_df = data.table(
-  est = c("No AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
-  hr = c(1.00, 0.95, 1.26, 2.49, rep(1,20)),
-  ci_low = c(1.00, 0.73, 0.99, 2.05, rep(1,20)),
-  ci_high = c(1.00, 1.24, 1.60, 3.03,rep(1,20))
+  est = c("No SA-AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
+  hr = c(1.00, 0.96, 1.28, 2.52, rep(1,20)),
+  ci_low = c(1.00, 0.74, 1.01, 2.07, rep(1,20)),
+  ci_high = c(1.00, 1.26, 1.64, 3.07,rep(1,20))
+)
+
+# Y: ICU mortality
+forest_df = data.table(
+  est = c("No SA-AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
+  hr = c(1.00, 1.05, 1.42, 2.98, rep(1,20)),
+  ci_low = c(1.00, 0.77, 1.07, 2.38, rep(1,20)),
+  ci_high = c(1.00, 1.24, 1.88, 3.73,rep(1,20))
 )
 
 require(forester)
@@ -229,32 +224,29 @@ forester(
   ci_low = forest_df$ci_low,
   ci_high = forest_df$ci_high,
   estimate=forest_df$hr,
-  estimate_col_name = "     OR (95% CI)",
+  estimate_col_name = "adjusted OR (95% CI)",
   font_family = "Sans",
   ci_sep = " — ",
+  justify = c(0, 0.5),
   # display = F,
   # file_path = "~/Downloads/forestplot.png",
   estimate_precision = 2,
   null_line_at = 1,
-  xlim= c(0.5, 3)
+  xlim= c(0.5, 3.5)
 )
-minmax = function(x){
-  return((x-min(x))/(max(x)-min(x)))
-}
 
-
-df[,inhos_duration_minmax := minmax(inhos_duration)]
-df[,icu_duration_minmax := minmax(icu_duration)]
-df[,TZ_to_disch_duration_minmax := minmax(TZ_to_disch_duration)]
-
-form = paste0("inhos_duration_minmax~",paste0(cox_risk_factors,collapse = "+"))
-glm_fit = glm(as.formula(form), family=binomial, data=df)
-forest_df = data.table(
-  est = c("No AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
-  hr = c(1.00, 1.06, 1.36, 1.88, rep(1,20)),
-  ci_low = c(1.00, 0.81, 1.07, 1.58, rep(1,20)),
-  ci_high = c(1.00, 1.39, 1.71, 2.25,rep(1,20))
-)
+# df[,inhos_duration_minmax := minmax(inhos_duration)]
+# df[,icu_duration_minmax := minmax(icu_duration)]
+# df[,TZ_to_disch_duration_minmax := minmax(TZ_to_disch_duration)]
+# 
+# form = paste0("inhos_duration_minmax~",paste0(cox_risk_factors,collapse = "+"))
+# glm_fit = glm(as.formula(form), family=binomial, data=df)
+# forest_df = data.table(
+#   est = c("No AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
+#   hr = c(1.00, 1.06, 1.36, 1.88, rep(1,20)),
+#   ci_low = c(1.00, 0.81, 1.07, 1.58, rep(1,20)),
+#   ci_high = c(1.00, 1.39, 1.71, 2.25,rep(1,20))
+# )
 
 
 # figure S3B ----------------------------------------------------------------
@@ -475,109 +467,55 @@ getRCSplot = function(x, target=NA,covars, outcome, time=NULL, xlab){
           exposure = x,
           covariates = covars,
           na.rm=T) +
-    labs(x=xlab, y="adjusted OR (95% CI)")
+    labs(x=xlab, y="adjusted odds ratio")
 }
 
-getRCSplot(covars = c(tbl2_vars,'OutputPreICU_ICUD1'),
-           x='InputPreICU_ICUD1',
-           outcome = 'AKI_01_23',
-           xlab='Input before ICU Admission')
-
-getRCSplot(covars = c(cox_risk_factors,'OutputPreICU_ICUD1'),
-           x='InputPreICU_ICUD1',
-           outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admssion')
-
-getRCSplot(covars = c(cox_risk_factors,'OutputPreICU_ICUD1'),
-           x='InputPreICU_ICUD1',
-           outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admssion')
-
-df[,input_ICU01 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1')]
-df[,output_ICUD01 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1')]
-getRCSplot(covars = c(tbl2_vars,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'AKI_01_23',
-           xlab='Input before ICU Admission ~ ICU Day1')
-
-
-## ALL
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-## Severe AKI
-getRCSplot(target= 1,
-           covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-getRCSplot(target=1,
-           covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-
-## Non-severe AKI
-getRCSplot(target= 0,
-           covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-# ICU mortality
-
-
-getRCSplot(target=0,
-           covars = c(cox_risk_factors,'output_ICUD01'),
-           x='input_ICU01',
-           outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day1')
-
-
-df[,input_ICU012 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2')]
-df[,output_ICUD012 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2')]
-getRCSplot(covars = c(tbl2_vars,'output_ICUD012'),
-           x='input_ICU012',
-           outcome = 'AKI_01_23',
-           xlab='Input before ICU Admission ~ ICU Day2')
-
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD012'),
-           x='input_ICU012',
-           outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day2')
-
-getRCSplot(covars = c(cox_risk_factors,'output_ICUD012'),
-           x='input_ICU012',
-           outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day2')
-
-df[,input_ICU0123 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2','Input_ICUD3')]
-df[,output_ICUD0123 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2', 'Output_ICUD3')]
-getRCSplot(covars = c(tbl2_vars,'output_ICUD0123'),
-           x='input_ICU0123',
-           outcome = 'AKI_01_23',
-           xlab='Input before ICU Admission ~ ICU Day3')
-
-getRCSplot(target=1,
-           covars = c(cox_risk_factors,'output_ICUD0123'),
+getRCSplot(covars = c(cox_risk_factors,'output_ICUD0123'),
            x='input_ICU0123',
            outcome = 'inhos_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day3')
+           xlab = 'Cumulative dose of fluid intake')
 
-getRCSplot(target=1,
-           covars = c(cox_risk_factors,'output_ICUD0123'),
+getRCSplot(covars = c(cox_risk_factors,'output_ICUD0123'),
            x='input_ICU0123',
            outcome = 'icu_mortality',
-           xlab = 'Input before ICU Admission ~ ICU Day3')
+           xlab = 'Cumulative dose of fluid intake')
+
+getRCSplot(target=1,
+  covars = c(cox_risk_factors,'output_ICUD0123'),
+           x='input_ICU0123',
+           outcome = 'inhos_mortality',
+           xlab = 'Cumulative dose of fluid intake')
+
+getRCSplot(target=1,
+  covars = c(cox_risk_factors,'output_ICUD0123'),
+           x='input_ICU0123',
+           outcome = 'icu_mortality',
+           xlab = 'Cumulative dose of fluid intake')
+
+# df[,input_ICU012 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2')]
+# df[,output_ICUD012 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2')]
+# getRCSplot(covars = c(tbl2_vars,'output_ICUD012'),
+#            x='input_ICU012',
+#            outcome = 'AKI_01_23',
+#            xlab='Input before ICU Admission ~ ICU Day2')
+# 
+# getRCSplot(covars = c(cox_risk_factors,'output_ICUD012'),
+#            x='input_ICU012',
+#            outcome = 'inhos_mortality',
+#            xlab = 'Input before ICU Admission ~ ICU Day2')
+# 
+# getRCSplot(covars = c(cox_risk_factors,'output_ICUD012'),
+#            x='input_ICU012',
+#            outcome = 'icu_mortality',
+#            xlab = 'Input before ICU Admission ~ ICU Day2')
+# 
+# df[,input_ICU0123 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2','Input_ICUD3')]
+# df[,output_ICUD0123 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2', 'Output_ICUD3')]
+# getRCSplot(covars = c(tbl2_vars,'output_ICUD0123'),
+#            x='input_ICU0123',
+#            outcome = 'AKI_01_23',
+#            xlab='Input before ICU Admission ~ ICU Day3')
+
 
 
 
