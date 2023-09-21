@@ -68,9 +68,6 @@ tbl2 |>
   kbl() |> 
   kable_paper("hover", full_width = F)
 
-
-
-
 # For univariable
 temp = lapply(tbl2_vars,\(x){
   form = paste0("AKI_01_23 ~ ",x,"+(1|Center2)")
@@ -117,11 +114,36 @@ tbl_regression(
 
 # Table 3----------------------------------------------------------
 
+# Bivariable
+
+tbl_summary(
+  df[AKI_01_23==1],
+  by = inhos_mortality,
+  include = cox_risk_factors,
+  statistic = list(
+    all_continuous() ~ "{mean} ± {sd}",
+    all_categorical() ~ "{n} ({p})"
+  ),
+  digits = list(
+    all_continuous() ~ 1,
+    all_categorical() ~ c(0,1)
+  ),
+  type = list(
+    c(CFScore) ~ 'continuous',
+    c(SEX,Septic_shock_ICUD1, s_pulmonary, 
+      s_abdominal, s_urinary,AntbBEFCurrent2, AppInitEmpThe_re) ~ "dichotomous"
+  ),
+  value = list(SEX ~ 'Male'),
+  missing="no"
+) |> 
+  add_p(pvalue_fun = ~ style_pvalue(., digits=3))
+
+
 cox_risk_factors = df[,.( Age,SEX, BMI, CFScore,
                           # AKI_stage, 
                           Comorbidity_MOSIAC_DM, Comorbidity_MOSIAC_Cardio, Comorbidity_MOSIAC_Lung,Comorbidity_MOSIAC_CKD,
                           Comorbidity_MOSIAC_SMT, Comorbidity_MOSIAC_HMM, Comorbidity_MOSIAC_IMM, 
-                          SOFA_ICUD1, SAPS3_ICUD1, 
+                          SOFA_ICUD1, SAPS3_ICUD1,  Septic_shock_ICUD1,
                           # Lactate, Hb, Plt, Bilirubin, Albumin, CRP_imp, ArterialPH,
                           s_pulmonary, s_abdominal, s_urinary,
                           # s_skinsoft, s_other, s_unclear,
@@ -131,32 +153,39 @@ cox_risk_factors = df[,.( Age,SEX, BMI, CFScore,
                           AppInitEmpThe_re, 
                           lac1h, bd1h, anti1h, br1h, app1h)] |> names()
 # For univariable
-temp = lapply(cox_risk_factors,\(x){
-  form = paste0("inhos_mortality ~ ",x,"+(1|Center2)")
-  fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==0])
-  tab = tbl_regression(
-    x=fit,
-    exponentiate = T,
-    pvalue_fun = ~style_pvalue(., digits=3),
-    estimate_fun = ~style_ratio(., digits=2)
-  )|> modify_table_styling(
-    column = estimate,
-    rows = !is.na(estimate),
-    cols_merge_pattern = "{estimate} ({conf.low}-{conf.high})"
-  ) |> 
-    modify_header(estimate ~ "**OR (95% CI)**") |> 
-    modify_column_hide(c(ci))
-})
-
-tbl_stack(temp)
+table3_univ = function(status){
+  stopifnot(is.numeric(status))
+  temp = lapply(cox_risk_factors,\(x){
+    form = paste0("inhos_mortality ~ ",x,"+(1|Center2)")
+    fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==status])
+    tab = tbl_regression(
+      x=fit,
+      exponentiate = T,
+      pvalue_fun = ~style_pvalue(., digits=3),
+      estimate_fun = ~style_ratio(., digits=2)
+    )|> modify_table_styling(
+      column = estimate,
+      rows = !is.na(estimate),
+      cols_merge_pattern = "{estimate} ({conf.low}-{conf.high})"
+    ) |> 
+      modify_header(estimate ~ "**OR (95% CI)**") |> 
+      modify_column_hide(c(ci))
+  })
+  
+  tbl_stack(temp)
+}
+table3_univ(0)
 
 # For multivariable
-form = paste0("Surv(inhos_duration, inhos_mortality==1)~", 
-              paste0(setdiff(cox_risk_factors,'Comorbidity_MOSIAC_IMM'), collapse = "+"),"+cluster(Center2)")
-fit = coxph(as.formula(form), data=df[AKI_YN==1])
 shapiro.test(df[AKI_01_23==0]$shock_index_SBP)
 shapiro.test(df[AKI_01_23==1]$shock_index_SBP)
 mytable(AKI_01_23 ~ shock_index_SBP + shock_index_DBP, df, digits=3)
+
+form = paste0('inhos_mortality ~ ',paste0(cox_risk_factors, collapse = "+"),"+(1|Center2)")
+fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==0])
+makeTable3(fit)
+fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==1])
+makeTable3(fit)
 
 tbl_summary(
   data=df,
@@ -388,17 +417,16 @@ tbl_stack(
 
 # Supple table 5 ----------------------------------------------------------
 require(gt)
-makeSupTbl5(60, var = 'br1h')
+makeSupTbl5(75, target = 'br1h', variables = cox_risk_factors)
+makeSupTbl5(70, target = 'br1h', variables = cox_risk_factors)
+makeSupTbl5(65, target = 'br1h', variables = cox_risk_factors)
+makeSupTbl5('both75', target = 'br1h', variables = cox_risk_factors)
 makeSupTbl5(60, var = 'app1h')
-makeSupTbl5(65, var = 'br1h')
 makeSupTbl5(65, var = 'app1h')
-makeSupTbl5(70, var = 'br1h')
 makeSupTbl5(70, var = 'app1h')
-makeSupTbl5(75, var = 'br1h')
 makeSupTbl5(75, var = 'app1h')
 makeSupTbl5('baseline', var = 'br1h')
 makeSupTbl5('baseline', var = 'app1h')
-makeSupTbl5('both75', var = 'br1h')
 makeSupTbl5('both75', var = 'app1h')
 
 # Supple table 6 ----------------------------------------------------------
