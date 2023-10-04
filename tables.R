@@ -185,7 +185,7 @@ form = paste0('inhos_mortality ~ ',paste0(cox_risk_factors, collapse = "+"),"+(1
 fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==0])
 makeTable3(fit)
 fit = glmer(as.formula(form), family=binomial, data=df[AKI_01_23==1])
-makeTable3(fit)
+makeTable3Reg(fit)
 
 tbl_summary(
   data=df,
@@ -224,10 +224,13 @@ cox.zph(fit)
 
 # missing values frequencies
 library(gt)
-missing_count_prob_tbl <- df[,..table_vars][,lapply(.SD,\(x) list(count = sum(is.na(x)), prob = sum(is.na(x)/nrow(df))*100 )) |> 
+
+table_vars2 = c(table_vars, c("Input_ICUD2","Input_ICUD3","Input_ICUD7","Input_ICUDL",
+                             "Output_ICUD2","Output_ICUD3","Output_ICUD7","Output_ICUDL"
+                             ))
+missing_count_prob_tbl <- df[,..table_vars2][,lapply(.SD,\(x) list(count = sum(is.na(x)), prob = sum(is.na(x)/nrow(df))*100 )) |> 
   rbindlist(idcol="Variable")];
 missing_count_prob_tbl[order(-count)] |> gt()
-
 
 missing_count_prob_tbl[order(-count)] |> fwrite("missing_value_count_prob.csv")
   ggplot(aes(x=reorder(Variable,-prob), y=prob))+
@@ -341,7 +344,7 @@ vars = df[,.(inhos_mortality, icu_mortality,
                   input_output_ICUD1, input_output_ICUD2,
                   input_output_ICUD3, input_output_ICUD7
 )] |> names()
-
+df[,.N,by=is.na(input_output_ICUD7)]
 tbl = tbl_summary(
   data=df,
   by="AKI_stage",

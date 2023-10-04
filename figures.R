@@ -1,4 +1,4 @@
-# Figure 2 ----------------------------------------------------------------
+# Figure 2. KM plot----------------------------------------------------------------
 aki = "AKI_stage"
 km_inhos_by_aki_stage = function(aki){
   form = paste0("Surv(inhos_duration, inhos_mortality==1) ~ ", aki)
@@ -8,10 +8,10 @@ km_inhos_by_aki_stage = function(aki){
                                   xlim= c(0,100),
                                   break.time.by=10,
                                   censor=F,
-                                  pval=T,
                                   risk.table=T,
                                   linetype = c("dotted","dotdash","dashed", "solid"),
-                                  legend.labs = c("Non-AKI","Stage 1", "Stage 2", "Stage 3"),
+                                  pval="P < 0.0001",
+                                  legend.labs=c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2","SA-AKI Stage 3"),
                                   palette="jama",
                                   pval.coord = c(1, 0.2),
                                   xlab="Time (day)"
@@ -91,7 +91,6 @@ ribbon_line_plot = function(data, ckd){
   df_aki_melt_aggr[, m_sd_n := paste0(format(round(mean,1),nsmall=1)," ± ",
                                       format(round(sd,1),nsmall=1),'\n(n=',scales::comma(n),')')]
   max_y = ifelse(ckd==0,6,8)
-  print(max_y)
   p1 = df_aki_melt_aggr |> 
     ggplot(aes(x=Day, y=mean,
                group = as.factor(AKI_stage))) +
@@ -104,9 +103,9 @@ ribbon_line_plot = function(data, ckd){
                        limits=c(0,max_y),
                        breaks=seq(0,max_y,1)) +
     scale_color_discrete(name="SA-AKI Stage",
-                         labels=c('No SA-AKI','Stage 1','Stage 2','Stage 3')) + 
+                         labels=c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2", "SA-AKI Stage 3")) + 
     scale_fill_discrete(name="SA-AKI Stage",
-                        labels=c('No SA-AKI','Stage 1','Stage 2','Stage 3')) + 
+                        labels=c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2", "SA-AKI Stage 3")) + 
     theme_classic() + 
     labs(x="Time",
          y= "Mean serum creatinine (mg/dL)") +
@@ -155,9 +154,9 @@ AKI_status_day1 != 0 &
 df_alluvial = df[AKI_stage!="Non-AKI",.N, by=.(AKI_stage, AKI_initial, AKI_status_day1, AKI_status_day2, 
                            AKI_status_day3, AKI_status_day7)]
 
-df_alluvial[,(target):=lapply(.SD, \(x) ifelse(x == 0, 'NoAKI', as.character(x))),.SDcols=target]
-df_alluvial[,(target):=lapply(.SD, factor, levels=rev(c("3","2","1","NoAKI","Alive","Dead"))),.SDcols = target]
 target = df_alluvial[,2:6] |> names()
+df_alluvial[,(target):=lapply(.SD, \(x) ifelse(x == 0, 'Without\nAKI', as.character(x))),.SDcols=target]
+df_alluvial[,(target):=lapply(.SD, factor, levels=rev(c("Dead", "3","2","1","Without\nAKI","Alive"))),.SDcols = target]
 df_alluvial
 alluvial(`Time zero` = df_alluvial$AKI_initial, 
          "ICU D1" = df_alluvial$AKI_status_day1, 
@@ -179,7 +178,8 @@ legend(x="top",
 df_alluvial[,sum(N)]
 df_alluvial[AKI_stage=='Stage 1', sum(N)]
 df_alluvial[AKI_stage == 'Stage 1' & AKI_status_day7==1]
-# Figure S3A ----------------------------------------------------------------
+
+# Figure S3A: inhos mortality ----------------------------------------------------------------
 
 # Table3 cox_risk_factors 변수 사용
 form = paste0("inhos_mortality~",paste0(c("AKI_stage",cox_risk_factors),collapse = "+"),"+(1|Center2)")
@@ -204,7 +204,7 @@ tbl_regression(
 
 # Y: inhos_mortality
 forest_df = data.table(
-  est = c("No SA-AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
+  est = c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2", "SA-AKI Stage 3", rep(1, 20)),
   hr = c(1.00, 0.96, 1.28, 2.52, rep(1,20)),
   ci_low = c(1.00, 0.74, 1.01, 2.07, rep(1,20)),
   ci_high = c(1.00, 1.26, 1.64, 3.07,rep(1,20))
@@ -212,7 +212,7 @@ forest_df = data.table(
 
 # Y: ICU mortality
 forest_df = data.table(
-  est = c("No SA-AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
+  est = c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2", "SA-AKI Stage 3", rep(1, 20)),
   hr = c(1.00, 1.05, 1.42, 2.98, rep(1,20)),
   ci_low = c(1.00, 0.77, 1.07, 2.38, rep(1,20)),
   ci_high = c(1.00, 1.24, 1.88, 3.73,rep(1,20))
@@ -220,11 +220,11 @@ forest_df = data.table(
 
 require(forester)
 forester(
-  left_side_data = forest_df[,.(`AKI status` = est)],
+  left_side_data = forest_df[,.(`SA-AKI status` = est)],
   ci_low = forest_df$ci_low,
   ci_high = forest_df$ci_high,
   estimate=forest_df$hr,
-  estimate_col_name = "adjusted OR (95% CI)",
+  estimate_col_name = "Adjusted OR (95% CI)",
   font_family = "Sans",
   ci_sep = " — ",
   justify = c(0, 0.5),
@@ -235,21 +235,7 @@ forester(
   xlim= c(0.5, 3.5)
 )
 
-# df[,inhos_duration_minmax := minmax(inhos_duration)]
-# df[,icu_duration_minmax := minmax(icu_duration)]
-# df[,TZ_to_disch_duration_minmax := minmax(TZ_to_disch_duration)]
-# 
-# form = paste0("inhos_duration_minmax~",paste0(cox_risk_factors,collapse = "+"))
-# glm_fit = glm(as.formula(form), family=binomial, data=df)
-# forest_df = data.table(
-#   est = c("No AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
-#   hr = c(1.00, 1.06, 1.36, 1.88, rep(1,20)),
-#   ci_low = c(1.00, 0.81, 1.07, 1.58, rep(1,20)),
-#   ci_high = c(1.00, 1.39, 1.71, 2.25,rep(1,20))
-# )
-
-
-# figure S3B ----------------------------------------------------------------
+# figure S3B: ICU mortality ----------------------------------------------------------------
 form = paste0("inhos_mortality~",paste0(cox_risk_factors,collapse = "+"))
 lr_fit = glm(as.formula(form), family=binomial, data=df)
 single_rows = c("SEX","s_pulmonary","s_abdominal","s_urinary","s_other",
@@ -271,16 +257,14 @@ tbl_regression(
 
 
 forest_df = data.table(
-  est = c("No AKI","Stage 1","Stage 2", "Stage 3", rep(1, 20)),
-  hr = c(1.00, 0.94, 1.16, 2.62, rep(1,20)),
-  ci_low = c(1.00, 0.72, 0.91, 2.19, rep(1,20)),
-  ci_high = c(1.00, 1.22, 1.48, 3.15,rep(1,20))
+  est = c("Without SA-AKI","SA-AKI Stage 1","SA-AKI Stage 2", "SA-AKI Stage 3", rep(1, 20)),
+  hr = c(1.00, 1.05, 1.42, 2.98, rep(1,20)),
+  ci_low = c(1.00, 0.77, 1.07, 2.38, rep(1,20)),
+  ci_high = c(1.00, 1.24, 1.88, 3.73,rep(1,20))
 )
-# remotes::install_github("rdboyes/forester")
 
-require(forester)
 forester(
-  left_side_data = forest_df[,.(`AKI status` = est)],
+  left_side_data = forest_df[,.(`SA-AKI status` = est)],
   ci_low = forest_df$ci_low,
   ci_high = forest_df$ci_high,
   estimate=forest_df$hr,
@@ -291,11 +275,9 @@ forester(
   # file_path = "~/Downloads/forestplot.png",
   estimate_precision = 2,
   null_line_at = 1,
-  xlim= c(0.5, 3)
+  xlim= c(0.5, 3.5)
 )
 
-
-plot(p)
 # Figure S4. AKI stage Criteria  ----------------------------------------------------------------
 
 df[,urine_output_ICUD1 := (Output_ICUD1 / Wt / 24)]
@@ -466,9 +448,14 @@ getRCSplot = function(x, target=NA,covars, outcome, time=NULL, xlab){
           time = time,
           exposure = x,
           covariates = covars,
+          fontfamily = "sans",
+          pvalue.label.nonlinear = "P-value for nonlinear spline term",
           na.rm=T) +
     labs(x=xlab, y="adjusted odds ratio")
 }
+
+df[,input_ICU0123 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2','Input_ICUD3')]
+df[,output_ICUD0123 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2', 'Output_ICUD3')]
 
 getRCSplot(covars = c(cox_risk_factors,'output_ICUD0123'),
            x='input_ICU0123',
@@ -509,8 +496,6 @@ getRCSplot(target=1,
 #            outcome = 'icu_mortality',
 #            xlab = 'Input before ICU Admission ~ ICU Day2')
 # 
-# df[,input_ICU0123 := rowSums(.SD, na.rm=T),.SDcols=c('InputPreICU_ICUD1', 'Input_ICUD1','Input_ICUD2','Input_ICUD3')]
-# df[,output_ICUD0123 := rowSums(.SD, na.rm=T),.SDcols=c('OutputPreICU_ICUD1', 'Output_ICUD1','Output_ICUD2', 'Output_ICUD3')]
 # getRCSplot(covars = c(tbl2_vars,'output_ICUD0123'),
 #            x='input_ICU0123',
 #            outcome = 'AKI_01_23',
